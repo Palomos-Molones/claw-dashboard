@@ -18,6 +18,7 @@ const config = {
   clientSecret: process.env.GITHUB_CLIENT_SECRET ?? '',
   sessionSecret: process.env.SESSION_SECRET ?? '',
   authBypass: process.env.AUTH_BYPASS === '1' && process.env.NODE_ENV !== 'production',
+  sqlite3Bin: process.env.SQLITE3_BIN ?? '/home/linuxbrew/.linuxbrew/bin/sqlite3',
   bridgeDb: process.env.BRIDGE_DB ?? '/home/clawbot/.local/state/github-agent-bridge/bridge.sqlite3',
   sessionsDir: process.env.OPENCLAW_SESSIONS_DIR ?? '/home/clawbot/.openclaw/agents/main/sessions',
   codexSessionsDir:
@@ -207,7 +208,7 @@ if (process.env.NODE_ENV === 'production') {
 
 async function sqliteJson(sql) {
   try {
-    const { stdout } = await execFileAsync('sqlite3', ['-json', config.bridgeDb, sql], { timeout: 5000 })
+    const { stdout } = await execFileAsync(config.sqlite3Bin, ['-json', config.bridgeDb, sql], { timeout: 5000 })
     return stdout.trim() ? JSON.parse(stdout) : []
   } catch (error) {
     return { error: String(error.stderr || error.message || error) }

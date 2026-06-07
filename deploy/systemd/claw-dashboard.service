@@ -6,6 +6,7 @@ After=network-online.target
 Type=simple
 WorkingDirectory=/home/clawbot/.openclaw/workspace/claw-dashboard
 EnvironmentFile=/home/clawbot/.config/claw-dashboard/env
+Environment=SQLITE3_BIN=/home/linuxbrew/.linuxbrew/bin/sqlite3
 ExecStart=/home/clawbot/.nvm/versions/node/v24.16.0/bin/node server/index.mjs
 Restart=always
 RestartSec=5
