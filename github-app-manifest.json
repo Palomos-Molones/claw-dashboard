@@ -1,0 +1,17 @@
+{
+  "name": "Palomos Molones Claw Dashboard",
+  "url": "https://dashboard.claw.sassu.es",
+  "hook_attributes": {
+    "active": false
+  },
+  "redirect_url": "https://dashboard.claw.sassu.es/auth/github/callback",
+  "callback_urls": [
+    "https://dashboard.claw.sassu.es/auth/github/callback"
+  ],
+  "public": false,
+  "default_permissions": {
+    "members": "read",
+    "metadata": "read"
+  },
+  "default_events": []
+}
