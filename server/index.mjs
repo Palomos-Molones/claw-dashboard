@@ -128,9 +128,36 @@ app.get('/auth/github/callback', async (req, res) => {
     fetch('https://api.github.com/user', { headers }),
     fetch(`https://api.github.com/user/memberships/orgs/${config.org}`, { headers }),
   ])
-  const user = await userResponse.json()
-  const membership = membershipResponse.ok ? await membershipResponse.json() : null
-  if (!user.login || membership?.state !== 'active') return res.status(403).send('GitHub org membership required.')
+  const user = await safeJson(userResponse)
+  const membership = await safeJson(membershipResponse)
+  if (!user.login || membershipResponse.status !== 200 || membership?.state !== 'active') {
+    const details = {
+      user: user.login ?? null,
+      org: config.org,
+      membershipStatus: membershipResponse.status,
+      membershipState: membership?.state ?? null,
+      githubMessage: membership?.message ?? null,
+      acceptedScopes: membershipResponse.headers.get('x-accepted-oauth-scopes') ?? null,
+      oauthScopes: membershipResponse.headers.get('x-oauth-scopes') ?? null,
+    }
+    console.warn('GitHub org membership check failed', details)
+    return res
+      .status(403)
+      .type('text/plain')
+      .send(
+        [
+          'GitHub org membership required.',
+          '',
+          `User: ${details.user ?? 'unknown'}`,
+          `Required org: ${details.org}`,
+          `GitHub membership API status: ${details.membershipStatus}`,
+          `GitHub membership state: ${details.membershipState ?? 'none'}`,
+          `GitHub message: ${details.githubMessage ?? 'none'}`,
+          `Accepted scopes: ${details.acceptedScopes ?? 'none'}`,
+          `OAuth scopes: ${details.oauthScopes ?? 'none'}`,
+        ].join('\n'),
+      )
+  }
 
   const session = encodeSession({ login: user.login, avatarUrl: user.avatar_url, org: config.org, iat: Date.now() })
   res.setHeader('Set-Cookie', [
@@ -150,6 +177,14 @@ app.post('/logout', (_req, res) => {
   res.setHeader('Set-Cookie', cookie.serialize('claw_session', '', { path: '/', maxAge: 0 }))
   res.json({ ok: true })
 })
+
+async function safeJson(response) {
+  try {
+    return await response.json()
+  } catch {
+    return {}
+  }
+}
 
 app.get('/api/status', requireAuth, async (req, res) => {
   const [bridge, services, usage] = await Promise.all([readBridge(), readServices(), readUsage()])
