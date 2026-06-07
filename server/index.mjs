@@ -224,7 +224,17 @@ async function readBridge() {
       "select id, ts, job_id, phase, summary from worklog order by datetime(ts) desc limit 24;",
     ),
   ])
-  return { counts, recent, worklog, db: config.bridgeDb }
+  const errors = {}
+  if (!Array.isArray(counts)) errors.counts = counts.error ?? 'Unable to read queue counts'
+  if (!Array.isArray(recent)) errors.recent = recent.error ?? 'Unable to read recent jobs'
+  if (!Array.isArray(worklog)) errors.worklog = worklog.error ?? 'Unable to read worklog'
+  return {
+    counts: Array.isArray(counts) ? counts : [],
+    recent: Array.isArray(recent) ? recent : [],
+    worklog: Array.isArray(worklog) ? worklog : [],
+    errors,
+    db: config.bridgeDb,
+  }
 }
 
 async function readServices() {

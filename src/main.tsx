@@ -34,7 +34,7 @@ type UsageSource = {
 type DashboardData = {
   generatedAt: string
   user: { login: string; avatarUrl?: string }
-  bridge: { counts: JobCount[]; recent: Job[]; worklog: Worklog[] }
+  bridge: { counts: JobCount[]; recent: Job[]; worklog: Worklog[]; errors?: Record<string, string> }
   services: Record<string, Record<string, string>>
   usage: { main: UsageSource; codex: UsageSource; note: string }
 }
@@ -52,7 +52,10 @@ function App() {
     )
   }
 
-  const counts = Object.fromEntries(data.bridge.counts.map((item) => [item.status, item.count]))
+  const bridgeCounts = Array.isArray(data.bridge.counts) ? data.bridge.counts : []
+  const recentJobs = Array.isArray(data.bridge.recent) ? data.bridge.recent : []
+  const worklog = Array.isArray(data.bridge.worklog) ? data.bridge.worklog : []
+  const counts = Object.fromEntries(bridgeCounts.map((item) => [item.status, item.count]))
   const queued = (counts.pending ?? 0) + (counts.waiting_approval ?? 0)
   const errored = (counts.blocked ?? 0) + (counts.denied ?? 0)
   const totalTokens = data.usage.main.totalTokens + data.usage.codex.totalTokens
@@ -116,6 +119,7 @@ function App() {
 
       <section className="table-section">
         <Panel title="Recent bridge jobs">
+          <BridgeErrors errors={data.bridge.errors} />
           <div className="table-wrap">
             <table>
               <thead>
@@ -130,7 +134,7 @@ function App() {
                 </tr>
               </thead>
               <tbody>
-                {data.bridge.recent.map((job) => (
+                {recentJobs.map((job) => (
                   <tr key={job.id}>
                     <td>#{job.id}</td>
                     <td><Badge status={job.status} /></td>
@@ -150,7 +154,7 @@ function App() {
       <section className="table-section">
         <Panel title="Latest worklog">
           <div className="log-list">
-            {data.bridge.worklog.map((item) => (
+            {worklog.map((item) => (
               <div className="log-row" key={item.id}>
                 <code>{item.phase}</code>
                 <span>{item.summary}</span>
@@ -163,6 +167,43 @@ function App() {
 
       <footer>Last refresh {new Date(data.generatedAt).toLocaleString()}</footer>
     </main>
+  )
+}
+
+class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { error: Error | null }> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props)
+    this.state = { error: null }
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { error }
+  }
+
+  render() {
+    if (!this.state.error) return this.props.children
+    return (
+      <main className="shell center">
+        <div className="login-panel">
+          <AlertTriangle size={34} />
+          <h1>Dashboard render error</h1>
+          <p>{this.state.error.message}</p>
+          <button onClick={() => window.location.reload()}>Reload</button>
+        </div>
+      </main>
+    )
+  }
+}
+
+function BridgeErrors({ errors }: { errors?: Record<string, string> }) {
+  const entries = Object.entries(errors ?? {})
+  if (!entries.length) return null
+  return (
+    <div className="error-list">
+      {entries.map(([name, message]) => (
+        <p key={name}><strong>{name}</strong>: {message}</p>
+      ))}
+    </div>
   )
 }
 
@@ -279,6 +320,8 @@ function relative(value: string) {
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
   </StrictMode>,
 )
