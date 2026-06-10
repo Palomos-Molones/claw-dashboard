@@ -1,5 +1,6 @@
 import crypto from 'node:crypto'
 import fs from 'node:fs/promises'
+import os from 'node:os'
 import path from 'node:path'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
@@ -8,6 +9,8 @@ import cookie from 'cookie'
 
 const execFileAsync = promisify(execFile)
 const app = express()
+let previousCpu = null
+let previousNetwork = null
 
 const config = {
   host: process.env.HOST ?? '127.0.0.1',
@@ -188,7 +191,7 @@ async function safeJson(response) {
 }
 
 app.get('/api/status', requireAuth, async (req, res) => {
-  const [bridge, services, usage] = await Promise.all([readBridge(), readServices(), readUsage()])
+  const [bridge, services, usage, system] = await Promise.all([readBridge(), readServices(), readUsage(), readSystem()])
   res.json({
     generatedAt: new Date().toISOString(),
     user: req.user,
@@ -196,6 +199,7 @@ app.get('/api/status', requireAuth, async (req, res) => {
     bridge,
     services,
     usage,
+    system,
   })
 })
 
@@ -266,6 +270,96 @@ async function systemctl(args) {
 async function readUsage() {
   const [main, codex] = await Promise.all([scanJsonlDir(config.sessionsDir), scanJsonlDir(config.codexSessionsDir)])
   return { main, codex, note: 'Usage is computed from local session JSONL files and may lag live provider quota.' }
+}
+
+async function readSystem() {
+  const [disk, network] = await Promise.all([readDisk('/'), readNetwork()])
+  const memoryTotal = os.totalmem()
+  const memoryFree = os.freemem()
+  const memoryUsed = memoryTotal - memoryFree
+  return {
+    cpu: readCpu(),
+    memory: {
+      total: memoryTotal,
+      used: memoryUsed,
+      free: memoryFree,
+      percent: percent(memoryUsed, memoryTotal),
+    },
+    disk,
+    network,
+    loadAverage: os.loadavg(),
+    uptime: os.uptime(),
+  }
+}
+
+function readCpu() {
+  const cpus = os.cpus()
+  const totals = cpus.map((cpu) => {
+    const idle = cpu.times.idle
+    const total = Object.values(cpu.times).reduce((sum, value) => sum + value, 0)
+    return { idle, total }
+  })
+  const idle = totals.reduce((sum, item) => sum + item.idle, 0)
+  const total = totals.reduce((sum, item) => sum + item.total, 0)
+  let usage = 0
+  if (previousCpu) {
+    const idleDelta = idle - previousCpu.idle
+    const totalDelta = total - previousCpu.total
+    usage = totalDelta > 0 ? percent(totalDelta - idleDelta, totalDelta) : 0
+  }
+  previousCpu = { idle, total }
+  return {
+    cores: cpus.length,
+    model: cpus[0]?.model ?? 'unknown',
+    percent: usage,
+  }
+}
+
+async function readDisk(mount) {
+  try {
+    const stats = await fs.statfs(mount)
+    const total = Number(stats.blocks) * Number(stats.bsize)
+    const free = Number(stats.bavail) * Number(stats.bsize)
+    const used = total - free
+    return {
+      mount,
+      total,
+      used,
+      free,
+      percent: percent(used, total),
+    }
+  } catch (error) {
+    return { mount, error: String(error.message || error), total: 0, used: 0, free: 0, percent: 0 }
+  }
+}
+
+async function readNetwork() {
+  const now = Date.now()
+  const interfaces = await fs.readFile('/proc/net/dev', 'utf8').catch(() => '')
+  const totals = { rxBytes: 0, txBytes: 0 }
+  for (const line of interfaces.split('\n').slice(2)) {
+    const [namePart, valuesPart] = line.split(':')
+    const name = namePart?.trim()
+    if (!name || name === 'lo' || !valuesPart) continue
+    const values = valuesPart.trim().split(/\s+/).map(Number)
+    totals.rxBytes += values[0] || 0
+    totals.txBytes += values[8] || 0
+  }
+
+  let rxRate = 0
+  let txRate = 0
+  if (previousNetwork) {
+    const seconds = Math.max((now - previousNetwork.ts) / 1000, 1)
+    rxRate = Math.max(0, (totals.rxBytes - previousNetwork.rxBytes) / seconds)
+    txRate = Math.max(0, (totals.txBytes - previousNetwork.txBytes) / seconds)
+  }
+  previousNetwork = { ...totals, ts: now }
+
+  return { ...totals, rxRate, txRate }
+}
+
+function percent(value, total) {
+  return total > 0 ? Math.round((value / total) * 1000) / 10 : 0
 }
 
 async function scanJsonlDir(root) {

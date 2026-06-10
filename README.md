@@ -8,6 +8,7 @@ Operational dashboard for the OpenClaw host and the GitHub agent bridge.
 - Recent bridge jobs and worklog events from the local SQLite queue.
 - Systemd state for the bridge executor, reader timer and nginx.
 - Observed token usage from local OpenClaw and Codex session JSONL files.
+- Host resource telemetry: CPU, memory, disk and network throughput.
 
 ## Auth
 

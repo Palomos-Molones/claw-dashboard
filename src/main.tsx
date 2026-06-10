@@ -1,7 +1,21 @@
 import * as React from 'react'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import { Activity, AlertTriangle, CheckCircle2, Clock3, Github, LogOut, RefreshCw, Server, Zap } from 'lucide-react'
+import {
+  Activity,
+  AlertTriangle,
+  CheckCircle2,
+  Clock3,
+  Cpu,
+  Github,
+  HardDrive,
+  LogOut,
+  MemoryStick,
+  Network,
+  RefreshCw,
+  Server,
+  Zap,
+} from 'lucide-react'
 import './styles.css'
 
 type JobCount = { status: string; count: number }
@@ -31,12 +45,29 @@ type UsageSource = {
   cost: number
   byDay: UsageBucket[]
 }
+type SystemResource = {
+  total: number
+  used: number
+  free: number
+  percent: number
+  mount?: string
+  error?: string
+}
+type SystemHealth = {
+  cpu: { cores: number; model: string; percent: number }
+  memory: SystemResource
+  disk: SystemResource
+  network: { rxBytes: number; txBytes: number; rxRate: number; txRate: number }
+  loadAverage: number[]
+  uptime: number
+}
 type DashboardData = {
   generatedAt: string
   user: { login: string; avatarUrl?: string }
   bridge: { counts: JobCount[]; recent: Job[]; worklog: Worklog[]; errors?: Record<string, string> }
   services: Record<string, Record<string, string>>
   usage: { main: UsageSource; codex: UsageSource; note: string }
+  system: SystemHealth
 }
 
 function App() {
@@ -89,6 +120,41 @@ function App() {
         <Metric icon={<AlertTriangle />} label="Errors / denied" value={errored} tone={errored ? 'red' : 'green'} />
         <Metric icon={<Server />} label="Services active" value={`${servicesOk}/${Object.keys(data.services).length}`} tone="cyan" />
         <Metric icon={<Zap />} label="Observed tokens" value={formatNumber(totalTokens)} tone="violet" />
+      </section>
+
+      <section className="resource-grid">
+        <ResourceMeter
+          icon={<Cpu />}
+          label="CPU"
+          value={`${formatPercent(data.system.cpu.percent)}%`}
+          detail={`${data.system.cpu.cores} cores · load ${formatDecimal(data.system.loadAverage[0] ?? 0)}`}
+          percent={data.system.cpu.percent}
+          tone="cyan"
+        />
+        <ResourceMeter
+          icon={<MemoryStick />}
+          label="RAM"
+          value={`${formatBytes(data.system.memory.used)} / ${formatBytes(data.system.memory.total)}`}
+          detail={`${formatPercent(data.system.memory.percent)}% used`}
+          percent={data.system.memory.percent}
+          tone="green"
+        />
+        <ResourceMeter
+          icon={<HardDrive />}
+          label="Disk"
+          value={`${formatBytes(data.system.disk.used)} / ${formatBytes(data.system.disk.total)}`}
+          detail={`${data.system.disk.mount ?? '/'} · ${formatPercent(data.system.disk.percent)}% used`}
+          percent={data.system.disk.percent}
+          tone="amber"
+        />
+        <ResourceMeter
+          icon={<Network />}
+          label="Network"
+          value={`${formatBytes(data.system.network.rxRate)}/s ↓`}
+          detail={`${formatBytes(data.system.network.txRate)}/s ↑ · ${formatBytes(data.system.network.rxBytes + data.system.network.txBytes)} total`}
+          percent={networkPercent(data.system.network.rxRate + data.system.network.txRate)}
+          tone="violet"
+        />
       </section>
 
       <section className="split">
@@ -239,6 +305,37 @@ function Metric({ icon, label, value, tone }: { icon: React.ReactElement; label:
   )
 }
 
+function ResourceMeter({
+  icon,
+  label,
+  value,
+  detail,
+  percent,
+  tone,
+}: {
+  icon: React.ReactElement
+  label: string
+  value: string
+  detail: string
+  percent: number
+  tone: string
+}) {
+  const bounded = Math.min(Math.max(percent, 0), 100)
+  return (
+    <div className={`resource-card ${tone}`}>
+      <div className="resource-head">
+        <span className="metric-icon">{icon}</span>
+        <span>{label}</span>
+      </div>
+      <strong>{value}</strong>
+      <div className="meter" aria-label={`${label} usage`}>
+        <span style={{ width: `${bounded}%` }} />
+      </div>
+      <small>{detail}</small>
+    </div>
+  )
+}
+
 function Badge({ status }: { status: string }) {
   return <span className={`badge ${status}`}>{status}</span>
 }
@@ -304,6 +401,26 @@ async function logout() {
 
 function formatNumber(value: number) {
   return new Intl.NumberFormat('en', { notation: value > 999999 ? 'compact' : 'standard' }).format(value)
+}
+
+function formatDecimal(value: number) {
+  return new Intl.NumberFormat('en', { maximumFractionDigits: 2 }).format(value)
+}
+
+function formatPercent(value: number) {
+  return new Intl.NumberFormat('en', { maximumFractionDigits: 1 }).format(value)
+}
+
+function formatBytes(value: number) {
+  if (!Number.isFinite(value) || value <= 0) return '0 B'
+  const units = ['B', 'KB', 'MB', 'GB', 'TB']
+  const index = Math.min(Math.floor(Math.log(value) / Math.log(1024)), units.length - 1)
+  return `${new Intl.NumberFormat('en', { maximumFractionDigits: index ? 1 : 0 }).format(value / 1024 ** index)} ${units[index]}`
+}
+
+function networkPercent(bytesPerSecond: number) {
+  const softCeiling = 20 * 1024 * 1024
+  return Math.min((bytesPerSecond / softCeiling) * 100, 100)
 }
 
 function relative(value: string) {
