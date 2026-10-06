@@ -23,6 +23,7 @@ const config = {
   authBypass: process.env.AUTH_BYPASS === '1' && process.env.NODE_ENV !== 'production',
   sqlite3Bin: process.env.SQLITE3_BIN ?? '/home/linuxbrew/.linuxbrew/bin/sqlite3',
   bridgeDb: process.env.BRIDGE_DB ?? '/home/clawbot/.local/state/github-agent-bridge/bridge.sqlite3',
+  bridgeDashboardUrl: process.env.BRIDGE_DASHBOARD_URL ?? '',
   sessionsDir: process.env.OPENCLAW_SESSIONS_DIR ?? '/home/clawbot/.openclaw/agents/main/sessions',
   codexSessionsDir:
     process.env.CODEX_SESSIONS_DIR ??
@@ -196,6 +197,7 @@ app.get('/api/status', requireAuth, async (req, res) => {
     generatedAt: new Date().toISOString(),
     user: req.user,
     auth: { org: config.org },
+    links: { bridgeDashboard: config.bridgeDashboardUrl },
     bridge,
     services,
     usage,

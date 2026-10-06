@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   Clock3,
   Cpu,
+  ExternalLink,
   Github,
   HardDrive,
   LogOut,
@@ -65,6 +66,7 @@ type DashboardData = {
   generatedAt: string
   user: { login: string; avatarUrl?: string }
   bridge: { counts: JobCount[]; recent: Job[]; worklog: Worklog[]; errors?: Record<string, string> }
+  links?: { bridgeDashboard?: string }
   services: Record<string, Record<string, string>>
   usage: { main: UsageSource; codex: UsageSource; note: string }
   system: SystemHealth
@@ -100,6 +102,12 @@ function App() {
           <h1>Claw control room</h1>
         </div>
         <div className="top-actions">
+          {data.links?.bridgeDashboard ? (
+            <a className="login-button" href={data.links.bridgeDashboard} target="_blank" rel="noopener noreferrer">
+              <ExternalLink size={18} />
+              Bridge dashboard
+            </a>
+          ) : null}
           <span className="user-pill">
             {data.user.avatarUrl ? <img src={data.user.avatarUrl} alt="" /> : <Github size={18} />}
             {data.user.login}
